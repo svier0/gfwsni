@@ -4,6 +4,10 @@ version = "1.2.0"
 edition = "2021"
 description = "gfwsni: 本地 443 代理，绕过 SNI 阻断"
 
+[lib]
+name = "gfwsni_lib"
+crate-type = ["rlib", "cdylib", "staticlib"]
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }

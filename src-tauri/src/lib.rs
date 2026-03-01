@@ -22,10 +22,17 @@ const ADDRESS: &str = "localhost";
 const DIAL_TIMEOUT_SECS: u64 = 5;
 const CERT_EXPIRE_SECS: u64 = 2000 * 3600;
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+pub fn run() -> anyhow::Result<()> {
     check_admin();
 
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| anyhow!("failed to build tokio runtime: {e}"))?;
+    rt.block_on(async_run())
+}
+
+async fn async_run() -> anyhow::Result<()> {
     rustls::crypto::ring::default_provider()
         .install_default()
         .map_err(|_| anyhow!("failed to install default crypto provider"))?;
@@ -189,7 +196,8 @@ fn build_server_config(host: &str) -> anyhow::Result<Arc<ServerConfig>> {
     Ok(Arc::new(config))
 }
 
-fn check_admin() {    #[cfg(windows)]
+fn check_admin() {
+    #[cfg(windows)]
     {
         use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
         use windows_sys::Win32::Security::{
@@ -230,15 +238,15 @@ fn install_ca(cert_path: &str) {
             .output();
         match output {
             Ok(out) if out.status.success() => {
-info!("CA 已安装到系统受信任根证书存储");
-        }
-        Ok(out) => {
-            error!(
-                "CA 安装失败: {}",
-                String::from_utf8_lossy(&out.stderr).trim()
-            );
-        }
-        Err(e) => error!("运行 certutil 失败: {}", e),
+                info!("CA 已安装到系统受信任根证书存储");
+            }
+            Ok(out) => {
+                error!(
+                    "CA 安装失败: {}",
+                    String::from_utf8_lossy(&out.stderr).trim()
+                );
+            }
+            Err(e) => error!("运行 certutil 失败: {}", e),
         }
     }
 }
