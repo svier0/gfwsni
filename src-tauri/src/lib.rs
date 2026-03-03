@@ -22,14 +22,22 @@ const ADDRESS: &str = "localhost";
 const DIAL_TIMEOUT_SECS: u64 = 5;
 const CERT_EXPIRE_SECS: u64 = 2000 * 3600;
 
-pub fn run() -> anyhow::Result<()> {
-    check_admin();
+pub fn run() {
+    tauri::Builder::default()
+        .setup(|app| {
+            check_admin();
 
-    let rt = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .map_err(|e| anyhow!("failed to build tokio runtime: {e}"))?;
-    rt.block_on(async_run())
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = async_run().await {
+                    eprintln!("业务逻辑退出: {:?}", e);
+                    handle.exit(1);
+                }
+            });
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }
 
 async fn async_run() -> anyhow::Result<()> {

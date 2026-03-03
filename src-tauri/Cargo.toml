@@ -8,7 +8,11 @@ description = "gfwsni: 本地 443 代理，绕过 SNI 阻断"
 name = "gfwsni_lib"
 crate-type = ["rlib", "cdylib", "staticlib"]
 
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
 [dependencies]
+tauri = { version = "2", features = [] }
 tokio = { version = "1", features = ["full"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
