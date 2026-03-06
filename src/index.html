@@ -4,10 +4,107 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>gfwsni</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>gfwsni</h1>
-  <p>占位界面：待接入 Tauri。</p>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="logo-area">
+        <img src="logo.png" alt="gfwsni" class="logo">
+      </div>
+      <nav class="menu">
+        <button class="menu-item active" data-page="general">常规设置</button>
+        <button class="menu-item" data-page="logs">运行日志</button>
+        <button class="menu-item" data-page="about">关于应用</button>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <!-- 常规设置 -->
+      <section class="page" id="page-general">
+        <div class="card">
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-title">运行服务</div>
+              <div class="setting-desc">运行中间人代理服务</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="switch-proxy">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="card card-gap">
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-title">重置规则</div>
+              <div class="setting-desc">下载最新代理规则</div>
+            </div>
+            <button class="btn" id="btn-reset-rules">立即下载</button>
+          </div>
+        </div>
+
+        <div class="card card-gap">
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-title">开机自启</div>
+              <div class="setting-desc">登录系统时自动启动</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="switch-autostart">
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-title">自动运行代理</div>
+              <div class="setting-desc">启动后立即运行代理服务</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="switch-auto-run">
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-title">静默启动</div>
+              <div class="setting-desc">启动后不显示主窗口，仅保留托盘</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="switch-silent-launch">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- 运行日志 -->
+      <section class="page" id="page-logs" hidden>
+        <div class="logs-box">
+          <pre class="logs-content" id="logs-content"></pre>
+        </div>
+      </section>
+
+      <!-- 关于应用 -->
+      <section class="page" id="page-about" hidden>
+        <div class="card about-card">
+          <div class="about-header">
+            <img src="logo.png" alt="gfwsni" class="about-logo">
+            <div class="about-meta">
+              <div class="about-name">gfwsni</div>
+              <div class="about-version">v2.0.1</div>
+            </div>
+          </div>
+          <div class="about-desc">基于 hosts 与 SNI 的本地代理工具</div>
+          <a class="about-link" href="https://github.com/svier0/gfwsni" target="_blank">GitHub</a>
+        </div>
+      </section>
+    </main>
+  </div>
+
   <script src="main.js"></script>
 </body>
 </html>

@@ -1,18 +1,20 @@
 [package]
 name = "gfwsni"
-version = "1.2.0"
+version = "2.0.1"
 edition = "2021"
 description = "gfwsni: 本地 443 代理，绕过 SNI 阻断"
 
 [lib]
 name = "gfwsni_lib"
-crate-type = ["rlib", "cdylib", "staticlib"]
+crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
+serde = { version = "1", features = ["derive"] }
+dotenvy = "0.15"
 tokio = { version = "1", features = ["full"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
@@ -31,4 +33,11 @@ der = { version = "0.7", features = ["alloc", "derive", "oid", "std"] }
 anyhow = "1"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading"] }
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
+
+[profile.release]
+opt-level = "z"
+strip = true
+lto = "thin"
+codegen-units = 1
+panic = "abort"

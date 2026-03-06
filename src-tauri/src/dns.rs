@@ -20,7 +20,16 @@ use tokio_rustls::TlsConnector;
 const DOH_UPSTREAM: &str = "https://doh.pub/dns-query";
 const DOH_LOCAL_IP: [u8; 4] = [127, 0, 0, 1];
 
-const HOSTS_FILE: &str = "hosts.txt";
+const HOSTS_FILE: &str = "data/hosts.txt";
+
+/// 基于 exe 所在目录解析相对路径，避免 UAC/工作目录变化导致找不到文件。
+pub fn path_of(rel: &str) -> std::path::PathBuf {
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    exe_dir.join(rel)
+}
 
 static TLS_CONNECTOR: OnceLock<TlsConnector> = OnceLock::new();
 static HOSTS_URL: OnceLock<String> = OnceLock::new();
@@ -163,23 +172,36 @@ async fn fetch(url: String) -> Result<String> {
 }
 
 pub async fn refresh() -> Result<()> {
-    if std::path::Path::new(HOSTS_FILE).exists() {
+    let path = path_of(HOSTS_FILE);
+    if path.exists() {
         info!("hosts.txt 已存在，跳过下载，绝不覆盖");
         return load_from_file();
     }
     let url = HOSTS_URL.get().unwrap().clone();
     let body = fetch(url).await?;
-    std::fs::write(HOSTS_FILE, &body)?;
-    info!("已下载 hosts 文件: {}", HOSTS_FILE);
+    std::fs::write(&path, &body)?;
+    info!("已下载 hosts 文件: {}", path.display());
     load_from_file()
 }
 
+/// 强制重新下载 hosts 规则并覆盖本地文件（用于"重置规则"）。
+/// 仅下载写文件，不更新内存规则，不影响正在运行的代理逻辑。
+pub async fn force_download() -> Result<()> {
+    let path = path_of(HOSTS_FILE);
+    let url = HOSTS_URL.get().unwrap().clone();
+    let body = fetch(url).await?;
+    std::fs::write(&path, &body)?;
+    info!("已重置 hosts 规则: {}", path.display());
+    Ok(())
+}
+
 pub fn load_from_file() -> Result<()> {
-    let content = std::fs::read_to_string(HOSTS_FILE)?;
+    let path = path_of(HOSTS_FILE);
+    let content = std::fs::read_to_string(&path)?;
     let map = parse_hosts(&content);
     let n = map.len();
     *HOSTS_MAP.get().unwrap().write().unwrap() = map;
-    info!("已从 {} 加载 {} 个站点", HOSTS_FILE, n);
+    info!("已从 {} 加载 {} 个站点", path.display(), n);
     Ok(())
 }
 
@@ -199,6 +221,11 @@ fn lookup_ip(host: &str) -> Option<String> {
 
 pub fn has(host: &str) -> bool {
     lookup_ip(host).is_some()
+}
+
+/// 返回 hosts 中所有需要代理的域名（含 CNAME 展开后的完整集合）。
+pub fn domains() -> Vec<String> {
+    HOSTS_MAP.get().unwrap().read().unwrap().keys().cloned().collect()
 }
 
 pub fn resolve_real_ip(host: &str) -> Vec<String> {

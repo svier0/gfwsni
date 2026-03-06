@@ -1,9 +1,5 @@
 /target/
 /src-tauri/target/
 /src-tauri/gen/
-ca.crt
-ca.key
-hosts.txt
-auto.out
-auto.err
+data/
 node_modules/
