@@ -125,6 +125,28 @@ if (resetBtn) {
   });
 }
 
+const resetCertBtn = document.getElementById("btn-reset-cert");
+
+if (resetCertBtn) {
+  resetCertBtn.addEventListener("click", async () => {
+    if (resetCertBtn.disabled) return;
+    resetCertBtn.disabled = true;
+    resetCertBtn.textContent = "重装中...";
+    try {
+      await invoke("reset_cert");
+      resetCertBtn.textContent = "完成";
+    } catch (e) {
+      console.error("重装证书失败:", e);
+      resetCertBtn.textContent = "失败";
+    } finally {
+      setTimeout(() => {
+        resetCertBtn.disabled = false;
+        resetCertBtn.textContent = "重装证书";
+      }, 1500);
+    }
+  });
+}
+
 const logsContent = document.getElementById("logs-content");
 
 async function refreshLogs() {

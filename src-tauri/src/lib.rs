@@ -90,6 +90,57 @@ async fn reset_rules() -> Result<(), String> {
     dns::force_download().await.map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn reset_cert() -> Result<(), String> {
+    let ca_cert = dns::path_of(CA_CERT_PATH);
+    let ca_key = dns::path_of(CA_KEY_PATH);
+
+    // 确保 data 目录存在
+    if let Some(parent) = ca_cert.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
+    }
+
+    // 删除旧证书文件
+    let _ = std::fs::remove_file(&ca_cert);
+    let _ = std::fs::remove_file(&ca_key);
+
+    // 卸载系统旧证书（忽略错误，可能不存在）
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let _ = std::process::Command::new("certutil")
+            .creation_flags(CREATE_NO_WINDOW)
+            .args(["-delstore", "Root", "gfwsni CA (auto-generated)"])
+            .output();
+    }
+
+    let cert_path = ca_cert.to_str().ok_or("证书路径包含非法字符")?;
+    let key_path = ca_key.to_str().ok_or("密钥路径包含非法字符")?;
+
+    // 生成新证书文件
+    cert::generate_ca(cert_path, key_path)
+        .map_err(|e| {
+            let msg = format!("生成 CA 证书失败: {e}");
+            error!("{msg}");
+            msg
+        })?;
+
+    // 安装新证书到系统信任库
+    install_ca(cert_path);
+
+    // 更新内存中的 CA
+    cert::reset(cert_path, key_path)
+        .map_err(|e| {
+            let msg = format!("重载 CA 证书失败: {e}");
+            error!("{msg}");
+            msg
+        })?;
+
+    info!("CA 证书已重置");
+    Ok(())
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -99,7 +150,8 @@ pub fn run() {
             get_logs,
             get_proxy_status,
             set_proxy_status,
-            reset_rules
+            reset_rules,
+            reset_cert
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

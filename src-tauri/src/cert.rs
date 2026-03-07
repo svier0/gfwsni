@@ -17,10 +17,10 @@ use time::OffsetDateTime;
 
 use crate::CERT_EXPIRE;
 
-static CA: OnceLock<(Certificate, KeyPair)> = OnceLock::new();
+static CA: Mutex<Option<(Certificate, KeyPair)>> = Mutex::new(None);
 static PSL: OnceLock<publicsuffix::List> = OnceLock::new();
 static CERT_CACHE: OnceLock<Arc<Mutex<HashMap<String, Arc<LeafCert>>>>> = OnceLock::new();
-static DOH_CONFIG: OnceLock<Arc<ServerConfig>> = OnceLock::new();
+static DOH_CONFIG: Mutex<Option<Arc<ServerConfig>>> = Mutex::new(None);
 
 #[derive(Debug)]
 pub struct LeafCert {
@@ -102,8 +102,34 @@ pub fn init(ca_cert_path: &str, ca_key_path: &str) -> Result<()> {
 
     PSL.set(publicsuffix::List::from_bytes(include_bytes!("public_suffix_list.dat"))?)
         .map_err(|_| anyhow!("PSL already set"))?;
-    CA.set((issuer, issuer_key)).map_err(|_| anyhow!("CA already set"))?;
-    CERT_CACHE.set(Arc::new(Mutex::new(HashMap::new()))).unwrap();
+    *CA.lock().unwrap() = Some((issuer, issuer_key));
+    CERT_CACHE.get_or_init(|| Arc::new(Mutex::new(HashMap::new())));
+    Ok(())
+}
+
+pub fn reset(ca_cert_path: &str, ca_key_path: &str) -> Result<()> {
+    let mut ca_cert_file = std::io::BufReader::new(std::fs::File::open(ca_cert_path)?);
+    let ca_cert_der = rustls_pemfile::certs(&mut ca_cert_file)
+        .next()
+        .transpose()?
+        .ok_or_else(|| anyhow!("no certificate found in {}", ca_cert_path))?;
+
+    let mut key_file = std::io::BufReader::new(std::fs::File::open(ca_key_path)?);
+    let key_der = rustls_pemfile::private_key(&mut key_file)?
+        .ok_or_else(|| anyhow!("no private key found in {}", ca_key_path))?;
+    let pkcs8 = match &key_der {
+        PrivateKeyDer::Pkcs8(k) => k.secret_pkcs8_der().to_vec(),
+        PrivateKeyDer::Pkcs1(k) => pkcs1_to_pkcs8(k.secret_pkcs1_der())?,
+        _ => return Err(anyhow!("unsupported CA key format, expect RSA PKCS#1 or PKCS#8")),
+    };
+    let issuer_key = KeyPair::try_from(&PrivatePkcs8KeyDer::from(pkcs8))?;
+
+    let issuer_params = CertificateParams::from_ca_cert_der(&ca_cert_der)?;
+    let issuer = issuer_params.self_signed(&issuer_key)?;
+
+    *CA.lock().unwrap() = Some((issuer, issuer_key));
+    *DOH_CONFIG.lock().unwrap() = None;
+    CERT_CACHE.get().map(|c| c.lock().unwrap().clear());
     Ok(())
 }
 
@@ -150,8 +176,10 @@ pub fn get_certificate(host: &str) -> Result<Arc<LeafCert>> {
     params.distinguished_name.push(DnType::CommonName, &cn);
     params.distinguished_name.push(DnType::CountryName, "CN");
 
-    let (issuer, issuer_key) = CA.get().unwrap();
+    let ca_guard = CA.lock().unwrap();
+    let (issuer, issuer_key) = ca_guard.as_ref().unwrap();
     let cert = params.signed_by(&leaf_key, issuer, issuer_key)?;
+    drop(ca_guard);
 
     let leaf = Arc::new(LeafCert {
         certs: vec![CertificateDer::from(cert.der().to_vec())],
@@ -163,7 +191,7 @@ pub fn get_certificate(host: &str) -> Result<Arc<LeafCert>> {
 
 /// Fixed server config used by the DoH endpoint (certificate valid for 127.0.0.1).
 pub fn doh_server_config() -> Result<Arc<ServerConfig>> {
-    if let Some(c) = DOH_CONFIG.get() {
+    if let Some(c) = DOH_CONFIG.lock().unwrap().as_ref() {
         return Ok(c.clone());
     }
     let key = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256)?;
@@ -176,8 +204,10 @@ pub fn doh_server_config() -> Result<Arc<ServerConfig>> {
     params.distinguished_name = DistinguishedName::new();
     params.distinguished_name.push(DnType::CommonName, "gfwsni DoH");
 
-    let (issuer, issuer_key) = CA.get().unwrap();
+    let ca_guard = CA.lock().unwrap();
+    let (issuer, issuer_key) = ca_guard.as_ref().unwrap();
     let cert = params.signed_by(&key, issuer, issuer_key)?;
+    drop(ca_guard);
 
     let leaf = LeafCert {
         certs: vec![CertificateDer::from(cert.der().to_vec())],
@@ -187,6 +217,6 @@ pub fn doh_server_config() -> Result<Arc<ServerConfig>> {
         .with_no_client_auth()
         .with_single_cert(leaf.certs, leaf.key_der)?;
     let config = Arc::new(config);
-    DOH_CONFIG.set(config.clone()).map_err(|_| anyhow!("doh config already set"))?;
+    *DOH_CONFIG.lock().unwrap() = Some(config.clone());
     Ok(config)
 }
